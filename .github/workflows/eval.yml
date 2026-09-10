@@ -60,8 +60,73 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Pinned, so CI runs the same SDK as the laptop. An unpinned dependency
+      # is the most common cause of "works on my machine" in Python.
       - name: Install
         run: pip install --quiet -r requirements.txt
+
+      # Prints the config and the URL the SDK actually builds, then makes two
+      # raw POSTs that bypass the SDK entirely. This runs BEFORE the pipeline,
+      # so a failure is diagnosed rather than guessed at.
+      - name: Diagnose Azure config
+        shell: bash
+        env:
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+          AZURE_OPENAI_API_VERSION: ${{ secrets.AZURE_OPENAI_API_VERSION }}
+        run: |
+          python - <<'PY'
+          import os, json, urllib.request, urllib.error, openai
+          from openai import AzureOpenAI
+
+          def show(name):
+              v = os.environ.get(name)
+              if v is None:
+                  print(f"{name:<28} NOT SET"); return ""
+              if not v.strip():
+                  print(f"{name:<28} EMPTY"); return ""
+              print(f"{name:<28} len={len(v):<4} stripped={len(v.strip()):<4} "
+                    f"first={v.strip()[:6]!r} last={v.strip()[-4:]!r}")
+              return v.strip()
+
+          ep  = show("AZURE_OPENAI_ENDPOINT")
+          key = show("AZURE_OPENAI_API_KEY")
+          dep = show("AZURE_OPENAI_DEPLOYMENT")
+          ver = show("AZURE_OPENAI_API_VERSION")
+          print(f"{'openai SDK':<28} {openai.__version__}")
+
+          if not all([ep, key, dep, ver]):
+              raise SystemExit("\n  A required value is missing - fix the secret above.\n")
+
+          client = AzureOpenAI(azure_endpoint=ep, api_key=key, api_version=ver)
+          print(f"{'base_url':<28} {client.base_url}")
+          print()
+
+          # Bypass the SDK. If one of these returns 200, the endpoint is
+          # reachable from this network and the problem is request shape.
+          body = json.dumps({"messages": [{"role": "user", "content": "hi"}],
+                             "max_completion_tokens": 8}).encode()
+          candidates = [
+              f"{str(client.base_url).rstrip('/')}/deployments/{dep}/chat/completions?api-version={ver}",
+              f"{ep.rstrip('/')}/chat/completions?api-version={ver}",
+              f"{ep.rstrip('/')}/deployments/{dep}/chat/completions?api-version={ver}",
+          ]
+          for url in candidates:
+              req = urllib.request.Request(
+                  url, data=body, method="POST",
+                  headers={"api-key": key, "Content-Type": "application/json"})
+              try:
+                  with urllib.request.urlopen(req, timeout=30):
+                      print(f"  200 OK   {url}")
+              except urllib.error.HTTPError as e:
+                  detail = e.read().decode("utf-8", "replace")[:120].replace("\n", " ")
+                  print(f"  {e.code}      {url}")
+                  if e.code not in (404,):
+                      print(f"           {detail}")
+              except Exception as e:
+                  print(f"  ERR      {type(e).__name__}: {e}")
+          PY
 
       - name: Run full evaluation
         shell: bash
@@ -74,19 +139,6 @@ jobs:
           AZURE_OPENAI_API_VERSION: ${{ secrets.AZURE_OPENAI_API_VERSION }}
           RUNS: ${{ github.event.inputs.runs || '3' }}
         run: |
-          python - <<'PY'
-          import os
-          for k in ["AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_KEY",
-                    "AZURE_OPENAI_DEPLOYMENT", "AZURE_OPENAI_API_VERSION"]:
-              v = os.environ.get(k)
-              if v is None:
-                  print(f"{k:<28} NOT SET")
-              elif not v.strip():
-                  print(f"{k:<28} EMPTY")
-              else:
-                  print(f"{k:<28} len={len(v):<4} stripped={len(v.strip()):<4} "
-                        f"first={v.strip()[:6]!r} last={v.strip()[-4:]!r}")
-          PY
           set +e
           python -B run_eval.py --runs "$RUNS" --judge | tee result.txt
           code=${PIPESTATUS[0]}
