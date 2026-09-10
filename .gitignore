@@ -1,0 +1,11 @@
+# Never commit real credentials.
+.env
+
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# step 11 artefacts
+traces/
+labels/

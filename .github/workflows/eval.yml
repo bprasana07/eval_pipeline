@@ -1,0 +1,100 @@
+name: Agent evaluation
+
+# Three tiers, because judge calls cost money and 1,000 cases x 3 runs
+# x 6 evaluators is roughly 18,000 model calls per push.
+#
+#   push          rules only, 1 run      free, ~10s     runs always
+#   pull_request  rules + judge, 3 runs  pennies        gates the merge
+#   manual        rules + judge, 5 runs  pre-release    on demand
+#
+# config.py reads .env, but real environment variables win over the file,
+# so CI injects secrets without a .env existing at all.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "Executions per case"
+        default: "5"
+
+jobs:
+  smoke:
+    name: Rule evaluators
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # No pip install: the rules path has zero dependencies by design.
+      - name: Run deterministic rules
+        shell: bash
+        env:
+          USE_REAL_AGENT: "0"     # scripted agent - no model calls, no key
+        run: |
+          set +e
+          python -B run_eval.py --runs 1 --no-judge --quiet | tee result.txt
+          code=${PIPESTATUS[0]}
+          {
+            echo "### Rule evaluators (scripted agent)"
+            echo '```'
+            cat result.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $code
+
+  full:
+    name: Rules + LLM judge
+    # Only on PRs and manual runs. This tier costs money.
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install --quiet openai
+
+      - name: Run full evaluation
+        shell: bash
+        env:
+          USE_REAL_AGENT: "1"
+          USE_JUDGE: "1"
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+          AZURE_OPENAI_API_VERSION: ${{ secrets.AZURE_OPENAI_API_VERSION }}
+          RUNS: ${{ github.event.inputs.runs || '3' }}
+        run: |
+          set +e
+          python -B run_eval.py --runs "$RUNS" --judge | tee result.txt
+          code=${PIPESTATUS[0]}
+          {
+            echo "### Full evaluation - $RUNS runs per case"
+            echo '```'
+            cat result.txt
+            echo '```'
+            if [ "$code" -ne 0 ]; then
+              echo "**Gate failed.** Fix the breach above, or say why the threshold"
+              echo "should change - do not lower it to go green."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $code
+
+      # Keep the output even when the gate fails, so a reviewer can read the
+      # failing run without re-triggering anything.
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-result
+          path: result.txt
+          retention-days: 14
