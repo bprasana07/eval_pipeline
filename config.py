@@ -185,10 +185,12 @@ def require_azure():
             ("AZURE_OPENAI_ENDPOINT", AZURE_ENDPOINT),
             ("AZURE_OPENAI_API_KEY", AZURE_API_KEY),
             ("AZURE_OPENAI_DEPLOYMENT", AZURE_DEPLOYMENT),
-        ] if not value
+            ("AZURE_OPENAI_API_VERSION", AZURE_API_VERSION),
+        ] if not (value or "").strip()
     ]
     if missing:
         raise SystemExit(
             "\n  Missing config: " + ", ".join(missing) +
-            "\n  Add them to .env (copy .env.example to .env to start).\n"
+            "\n  Locally: add them to .env (copy .env.example)."
+            "\n  In CI: add them as repository secrets.\n"
         )
