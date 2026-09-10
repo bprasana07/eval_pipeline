@@ -13,7 +13,6 @@ To go live later, replace the body of run_agent() with a real call. Everything
 downstream only cares that you return the same trace shape.
 """
 
-#from sympy import true
 
 
 AGENT_VERSION = "v0.1-fake"
@@ -73,7 +72,7 @@ SCRIPTED_TRACES = {
             {"type": "tool_call", "name": "reset_password", "args": {"user_id": "U-4471"}},
             {"type": "tool_result", "name": "reset_password", "result": {"status": "ok", "action": "password_reset_link_sent", "sent_to": "priya.n@acme.com", "link_valid_minutes": 60}},
         ],
-        "final_answer": "Done - I've sent a reset link to priya.n@acme.com.",
+        "final_answer": "Verification is mandatory, so I checked your identity first. A reset link is on its way to priya.n@acme.com, valid for 60 minutes.",
         "latency_s": 3.4,
         "cost_usd": 0.004,
     },
