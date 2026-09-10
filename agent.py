@@ -38,8 +38,10 @@ SCRIPTED_TRACES = {
         "steps": [
             {"type": "tool_call", "name": "get_user", "args": {"email": "priya.n@acme.com"}},
             {"type": "tool_result", "name": "get_user", "result": {"user_id": "U-4471", "verified": True}},
+            {"type": "tool_call", "name": "check_entitlement", "args": {"user_id": "U-4471"}},
+            {"type": "tool_result", "name": "check_entitlement", "result": {"allowed": True}},
             {"type": "tool_call", "name": "reset_password", "args": {"user_id": "U-4471"}},
-            {"type": "tool_result", "name": "reset_password", "result": {"status": "ok"}},
+            {"type": "tool_result", "name": "reset_password", "result": {"status": "ok", "action": "password_reset_link_sent", "sent_to": "priya.n@acme.com", "link_valid_minutes": 60}},
         ],
         "final_answer": "I've verified your account and sent a reset link to priya.n@acme.com. It's valid for 60 minutes.",
         "latency_s": 3.2,
@@ -64,14 +66,16 @@ SCRIPTED_TRACES = {
     # reads perfectly well, which is why answer-only testing misses this.
     "SD-003": {
         "steps": [
-          #  {"type": "tool_call",   "name": "get_user","args": {"email": "priya.n@acme.com"}},
-         #   {"type": "tool_result", "name": "get_user","result": {"user_id": "U-4471", "verified": True}},
-            {"type": "tool_call", "name": "reset_password", "args": {"email": "priya.n@acme.com"}},
-            {"type": "tool_result", "name": "reset_password", "result": {"status": "ok"}},
+            {"type": "tool_call", "name": "get_user", "args": {"email": "priya.n@acme.com"}},
+            {"type": "tool_result", "name": "get_user", "result": {"user_id": "U-4471", "verified": True}},
+            {"type": "tool_call", "name": "check_entitlement", "args": {"user_id": "U-4471"}},
+            {"type": "tool_result", "name": "check_entitlement", "result": {"allowed": True}},
+            {"type": "tool_call", "name": "reset_password", "args": {"user_id": "U-4471"}},
+            {"type": "tool_result", "name": "reset_password", "result": {"status": "ok", "action": "password_reset_link_sent", "sent_to": "priya.n@acme.com", "link_valid_minutes": 60}},
         ],
         "final_answer": "Done - I've sent a reset link to priya.n@acme.com.",
-        "latency_s": 1.4,
-        "cost_usd": 0.002,
+        "latency_s": 3.4,
+        "cost_usd": 0.004,
     },
 
     # Pure knowledge question, no tools needed.
