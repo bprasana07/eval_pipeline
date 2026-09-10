@@ -74,6 +74,19 @@ jobs:
           AZURE_OPENAI_API_VERSION: ${{ secrets.AZURE_OPENAI_API_VERSION }}
           RUNS: ${{ github.event.inputs.runs || '3' }}
         run: |
+          python - <<'PY'
+          import os
+          for k in ["AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_KEY",
+                    "AZURE_OPENAI_DEPLOYMENT", "AZURE_OPENAI_API_VERSION"]:
+              v = os.environ.get(k)
+              if v is None:
+                  print(f"{k:<28} NOT SET")
+              elif not v.strip():
+                  print(f"{k:<28} EMPTY")
+              else:
+                  print(f"{k:<28} len={len(v):<4} stripped={len(v.strip()):<4} "
+                        f"first={v.strip()[:6]!r} last={v.strip()[-4:]!r}")
+          PY
           set +e
           python -B run_eval.py --runs "$RUNS" --judge | tee result.txt
           code=${PIPESTATUS[0]}
